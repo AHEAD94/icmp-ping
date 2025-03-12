@@ -10,6 +10,8 @@ constexpr int ICMP_HEADER_LEN = 8;
 constexpr int ICMP_TOT_LEN = 40;
 constexpr int IP_HEADER_LEN = 20;
 
+constexpr char GOOGLE_DNS_ADDR[] = "8.8.8.8";
+
 void PrintPacketInfo(char *recvBuffer) {
     int recv_sn = 0;
     memcpy(&recv_sn, &recvBuffer[IP_HEADER_LEN + 6], sizeof(char) * 2);
@@ -64,7 +66,7 @@ int main() {
     // Set up target host
     sockaddr_in targetAddr;
     targetAddr.sin_family = AF_INET;
-    targetAddr.sin_addr.s_addr = inet_addr("192.168.0.100");
+    targetAddr.sin_addr.s_addr = inet_addr(GOOGLE_DNS_ADDR);
 
     uint16_t seqnum = 1;
 
