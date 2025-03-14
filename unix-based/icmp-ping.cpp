@@ -81,14 +81,14 @@ int main() {
 
         // 5. data (padding)
         char data[] = "abcdefghijklmnopqrstuvwabcdefghi"; // Windows-based data (32 bytes)
-        memcpy(&icmpPacket[8], &data, sizeof(data));
+        memcpy(&icmpPacket[8], &data, sizeof(data) - 1);
 
         // 6. checksum
         uint16_t checksum = computeChecksum(icmpPacket);
         memcpy(&icmpPacket[2], &checksum, sizeof(char) * 2);
 
         // Send the packet
-        int bytesSent = sendto(sock, icmpPacket, sizeof(icmpPacket), 0,
+        long bytesSent = sendto(sock, icmpPacket, sizeof(icmpPacket), 0,
                 (struct sockaddr*) &targetAddr, sizeof(targetAddr));
 
         start_time = std::chrono::system_clock::now();
@@ -106,7 +106,7 @@ int main() {
         sockaddr_in senderAddr;
 
         unsigned int senderAddrLen = sizeof(senderAddr);
-        int bytesReceived = recvfrom(sock, recvBuffer, sizeof(recvBuffer), 0,
+        long bytesReceived = recvfrom(sock, recvBuffer, sizeof(recvBuffer), 0,
                 (struct sockaddr*) &senderAddr, &senderAddrLen);
 
         if (bytesReceived == -1) {
