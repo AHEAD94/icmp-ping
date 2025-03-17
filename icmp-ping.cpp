@@ -1,10 +1,17 @@
-#define _WINSOCK_DEPRECATED_NO_WARNINGS
-
 #include <iostream>
+#ifdef _WIN32
 #include <winsock2.h>
-#include <chrono>
-
+#include <ws2tcpip.h>
 #pragma comment(lib, "ws2_32.lib")
+#else
+#include <cstring>
+#include <sys/socket.h>
+#include <netinet/ip.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#endif
+#include <chrono>
 
 constexpr int ICMP_HEADER_LEN = 8;
 constexpr int ICMP_TOT_LEN = 40;
@@ -13,11 +20,6 @@ constexpr int IP_HEADER_LEN = 20;
 constexpr char GOOGLE_DNS_ADDR[] = "8.8.8.8";
 
 void PrintPacketInfo(char *recvBuffer) {
-    int recv_sn = 0;
-    memcpy(&recv_sn, &recvBuffer[IP_HEADER_LEN + 6], sizeof(char) * 2);
-    int sn = ntohs(recv_sn);
-
-    std::cout << "[SN: " << sn << "]\n";
     for (int i = IP_HEADER_LEN; i < IP_HEADER_LEN + ICMP_TOT_LEN; i++) {
         std::cout << std::hex << static_cast<int>(static_cast<unsigned char>(recvBuffer[i])) << std::dec << " ";
     }
@@ -47,19 +49,27 @@ uint16_t computeChecksum(char *sendBuffer) {
 }
 
 int main() {
-    // Initialize Winsock
+#ifdef _WIN32
     WSADATA wsaData;
-
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-        std::cerr << "Failed to initialize Winsock.\n";
+        std::cerr << "WSAStartup failed.\n";
         return 1;
     }
+#endif
 
-    // Create a socket
-    SOCKET sock = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
-    if (sock == INVALID_SOCKET) {
+    int sock = -1;
+#ifdef __APPLE__
+    // On macOS, use DGRAM instead of RAW socket for testing purposes
+    sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_ICMP);
+#else
+    sock = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
+#endif
+
+    if (sock == -1) {
         std::cerr << "Failed to create socket.\n";
+#ifdef _WIN32
         WSACleanup();
+#endif
         return 1;
     }
 
@@ -93,7 +103,7 @@ int main() {
         seqnum++;
 
         // 5. data (padding)
-        char data[] = "abcdefghijklmnopqrstuvwabcdefghi";
+        char data[] = "abcdefghijklmnopqrstuvwabcdefghi"; // Windows-based data (32 bytes)
         memcpy(&icmpPacket[8], &data, sizeof(data) - 1);
 
         // 6. checksum
@@ -106,10 +116,12 @@ int main() {
 
         start_time = std::chrono::system_clock::now();
 
-        if (bytesSent == SOCKET_ERROR) {
+        if (bytesSent == -1) {
             std::cerr << "Failed to send ICMP packet.\n";
+#ifdef _WIN32
             closesocket(sock);
             WSACleanup();
+#endif
             return 1;
         }
 
@@ -118,33 +130,44 @@ int main() {
         memset(&recvBuffer, 0, sizeof(recvBuffer));
 
         sockaddr_in senderAddr;
+        socklen_t senderAddrLen = sizeof(senderAddr);
 
-        int senderAddrLen = sizeof(senderAddr);
         long bytesReceived = recvfrom(sock, recvBuffer, sizeof(recvBuffer), 0,
                 (struct sockaddr*) &senderAddr, &senderAddrLen);
 
-        if (bytesReceived == SOCKET_ERROR) {
+        if (bytesReceived == -1) {
             std::cerr << "Failed to receive ICMP reply.\n";
         }
         else {
+            int recv_sn = 0;
+            memcpy(&recv_sn, &recvBuffer[IP_HEADER_LEN + 6], sizeof(char) * 2);
+            int sn = ntohs(recv_sn);
+
             end_time = std::chrono::system_clock::now();
-            std::chrono::milliseconds time = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+            std::chrono::duration<double, std::milli> time = end_time - start_time;
 
             uint16_t ttl = static_cast<uint16_t>(static_cast<unsigned char>(recvBuffer[8]));
 
-            std::cout  << "Reply from " << inet_ntoa(senderAddr.sin_addr)
-                    << ": bytes=" << bytesReceived - IP_HEADER_LEN - ICMP_HEADER_LEN
-                    << " time" << (time.count() == 0 ? "<" : "=") << (time.count() == 0 ? 1 : time.count())
-                    << "ms TTL=" << ttl << '\n';
+            std::cout.precision(3);
+            std::cout  << bytesReceived - IP_HEADER_LEN - ICMP_HEADER_LEN << " bytes from " << inet_ntoa(senderAddr.sin_addr)
+                    << ": icmp_seq=" << sn << " ttl=" << ttl << " time=" << time.count() << " ms\n";
 
             //PrintPacketInfo(recvBuffer);
         }
 
+#ifdef _WIN32
         Sleep(1000);
+#else
+        sleep(1);
+#endif
     }
 
     // Clean up
+#ifdef _WIN32
     closesocket(sock);
     WSACleanup();
+#else
+    close(sock);
+#endif
     return 0;
 }
