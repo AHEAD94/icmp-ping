@@ -4,6 +4,7 @@
 #include <ws2tcpip.h>
 #pragma comment(lib, "ws2_32.lib")
 #else
+#include <cstring>
 #include <sys/socket.h>
 #include <netinet/ip.h>
 #include <netinet/in.h>
@@ -56,11 +57,12 @@ int main() {
     }
 #endif
 
+    int sock = -1;
 #ifdef __APPLE__
     // On macOS, use DGRAM instead of RAW socket for testing purposes
-    int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_ICMP);
+    sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_ICMP);
 #else
-    int sock = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
+    sock = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
 #endif
 
     if (sock == -1) {
@@ -74,11 +76,7 @@ int main() {
     // Set up target host
     sockaddr_in targetAddr;
     targetAddr.sin_family = AF_INET;
-#ifdef _WIN32
-    inet_pton(AF_INET, GOOGLE_DNS_ADDR, &targetAddr.sin_addr);
-#else
     targetAddr.sin_addr.s_addr = inet_addr(GOOGLE_DNS_ADDR);
-#endif
 
     uint16_t seqnum = 1;
 
@@ -132,8 +130,8 @@ int main() {
         memset(&recvBuffer, 0, sizeof(recvBuffer));
 
         sockaddr_in senderAddr;
+        socklen_t senderAddrLen = sizeof(senderAddr);
 
-        unsigned int senderAddrLen = sizeof(senderAddr);
         long bytesReceived = recvfrom(sock, recvBuffer, sizeof(recvBuffer), 0,
                 (struct sockaddr*) &senderAddr, &senderAddrLen);
 
