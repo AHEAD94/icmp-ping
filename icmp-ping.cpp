@@ -146,7 +146,12 @@ int main() {
 
     std::chrono::system_clock::time_point start_time, end_time;
 
-    while (true) {
+    int ping_count = 0;
+    std::cin >> ping_count;
+
+    while (ping_count > 0) {
+        ping_count--;
+
         // Create an ICMP Echo Request packet
         char icmpPacket[ICMP_TOT_LEN]; // Adjust the size as needed
         setICMPPacket(icmpPacket, ICMP_TOT_LEN, seqnum);
